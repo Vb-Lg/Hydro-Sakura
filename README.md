@@ -135,11 +135,27 @@ Hydro 默认主题给页面骨架写了不透明背景，固定定位的画布�
 `frontend/sakura.css` 因此把 `#panel` 设为完全透明，并把 `.section`、`.nav`、`.footer`
 改成基于 `--mantine-color-body` 的磨砂层，这样浅色与深色主题下正文对比度都正常。
 
-可调变量：
+可调变量（默认值即「管理面板设置」里的默认值，改 `sakura.css` 的 `:root` 只会影响没配置过的域）：
 
-- `--hydro-sakura-panel`：内容卡片不透明度，越低樱花越明显（默认 `84%`）
-- `--hydro-sakura-chrome`：导航与页脚不透明度（默认 `74%`）
-- `--hydro-sakura-blur`：磨砂强度（默认 `12px`）
+- `--hydro-sakura-panel`：内容卡片不透明度，越低樱花越明显（默认 `62%`）
+- `--hydro-sakura-chrome`：导航与页脚不透明度（默认 `52%`）
+- `--hydro-sakura-blur`：磨砂强度（默认 `14px`）
+
+### 画布层级
+
+画布用 `z-index: -1` 沉到 `body` 所有内容之下，而不是给 `body` 的子元素批量加
+`position: relative; z-index: 1`。后者会覆盖主题自己的定位规则，踩到两个坑：
+
+| 被覆盖的规则 | 后果 |
+| --- | --- |
+| `.hasjs .nav{position:fixed}` | 固定导航变成文档流元素，滚动时不再吸顶 |
+| `.nav--shadow{position:fixed;top:0;height:2.8125rem;z-index:300}` | 顶部阴影条掉进文档流，在导航下面多出一整条深色横带，整体内容也被挤下 45px |
+| `.nav.slideout-menu{position:fixed;z-index:0}` | 移动端抽屉菜单失效 |
+
+原因是 `body > *:not(...)` 带一个 id，特异性 `(1,0,1)` 高于主题的 `(0,1,0)`、`(0,2,0)`。
+给画布负层级之后，页面本身的定位属性一个都不用动。另外 `body` 上的
+`isolation: isolate` 把画布关在 `body` 自己的层叠上下文里，
+即使主题给根元素加了不透明背景也不会把画布挡掉。
 
 不建议直接覆盖 Hydro 的完整模板。官方文档推荐优先使用 frontend 动态注入，这样升级 Hydro 时不容易产生模板冲突。
 

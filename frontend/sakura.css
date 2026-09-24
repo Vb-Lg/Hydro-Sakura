@@ -5,6 +5,11 @@ Hydro 默认主题给 #panel(不透明 #edf0f2)、.section(#fff)、.footer(#fff)
 都写了不透明背景，固定定位的背景画布会被这些层完全盖住，只在极少数缝隙里可见。
 因此这里把页面骨架层改成"透出画布"的磨砂玻璃，既能看清樱花，也不牺牲文字可读性。
 
+画布用负层级沉到最底下，而不是给 body 的每个子元素强加 position/z-index：
+Hydro 主题自己用 z-index 定位了若干固定层（.hasjs .nav 固定导航、.nav--shadow 顶部阴影条、
+.nav.slideout-menu 移动端抽屉），把它们改成文档流元素会让固定导航失效、
+顶部多出一条本不该存在的横带。给画布负层级则不需要改动主题的任何布局属性。
+
 可调项：
 	--hydro-sakura-panel  内容卡片的不透明度，越低樱花越明显
 	--hydro-sakura-chrome 导航与页脚的不透明度
@@ -29,17 +34,16 @@ Hydro 默认主题给 #panel(不透明 #edf0f2)、.section(#fff)、.footer(#fff)
 	width: 100vw !important;
 	height: 100vh !important;
 	pointer-events: none;
-	z-index: 0 !important;
+	/*
+	负层级把画布压到 body 所有内容之下，页面本身的定位方式完全不用改。
+	body 上的 isolation 让画布待在 body 自己的层叠上下文里，
+	即使主题给根元素加了不透明背景也不会把画布挡掉。
+	*/
+	z-index: -1 !important;
 }
 
 body {
 	isolation: isolate;
-}
-
-/* 页面内容整体上浮到画布之上 */
-body > *:not(#hydro-sakura-canvas) {
-	position: relative;
-	z-index: 1;
 }
 
 /*
