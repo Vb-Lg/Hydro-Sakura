@@ -20,6 +20,9 @@ export class SakuraRenderer {
 	private previousTime = 0;
 	private running = false;
 	private resizeQueued = false;
+	private readonly resizeObserver: ResizeObserver;
+	private width = 1;
+	private height = 1;
 	private readonly handleResize = (): void => this.queueResize();
 	private readonly handleVisibilityChange = (): void => {
 		if (document.hidden) {
@@ -37,12 +40,14 @@ export class SakuraRenderer {
 
 		this.canvas = canvas;
 		this.context = context;
+		this.resizeObserver = new ResizeObserver(() => this.queueResize());
 		this.createPetals();
 	}
 
 	init(): void {
 		window.addEventListener('resize', this.handleResize, { passive: true });
 		document.addEventListener('visibilitychange', this.handleVisibilityChange);
+		this.resizeObserver.observe(this.canvas);
 		this.resize();
 		this.start();
 	}
@@ -70,6 +75,7 @@ export class SakuraRenderer {
 		this.stop();
 		window.removeEventListener('resize', this.handleResize);
 		document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+		this.resizeObserver.disconnect();
 		this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	}
 
@@ -120,8 +126,8 @@ export class SakuraRenderer {
 	}
 
 	private render(time: number): void {
-		const width = window.innerWidth;
-		const height = window.innerHeight;
+		const width = this.width;
+		const height = this.height;
 		const context = this.context;
 
 		context.clearRect(0, 0, width, height);
@@ -150,8 +156,11 @@ export class SakuraRenderer {
 
 	private resize(): void {
 		const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-		const width = Math.max(1, window.innerWidth);
-		const height = Math.max(1, window.innerHeight);
+		const bounds = this.canvas.getBoundingClientRect();
+		const width = Math.max(1, bounds.width || window.innerWidth);
+		const height = Math.max(1, bounds.height || window.innerHeight);
+		this.width = width;
+		this.height = height;
 		this.canvas.width = Math.floor(width * pixelRatio);
 		this.canvas.height = Math.floor(height * pixelRatio);
 		this.canvas.style.width = `${width}px`;
