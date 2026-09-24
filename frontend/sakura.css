@@ -1,3 +1,21 @@
+/*
+樱花背景主题样式。
+
+Hydro 默认主题给 #panel(不透明 #edf0f2)、.section(#fff)、.footer(#fff)、.nav(#fffffffa)
+都写了不透明背景，固定定位的背景画布会被这些层完全盖住，只在极少数缝隙里可见。
+因此这里把页面骨架层改成"透出画布"的磨砂玻璃，既能看清樱花，也不牺牲文字可读性。
+
+可调项：
+	--hydro-sakura-panel  内容卡片的不透明度，越低樱花越明显
+	--hydro-sakura-chrome 导航与页脚的不透明度
+	--hydro-sakura-blur   磨砂强度
+*/
+:root {
+	--hydro-sakura-panel: 84%;
+	--hydro-sakura-chrome: 74%;
+	--hydro-sakura-blur: 12px;
+}
+
 #hydro-sakura-canvas {
 	position: fixed !important;
 	top: 0 !important;
@@ -12,13 +30,38 @@
 }
 
 body {
-	background-color: #1b1f22;
 	isolation: isolate;
 }
 
+/* 页面内容整体上浮到画布之上 */
 body > *:not(#hydro-sakura-canvas) {
 	position: relative;
 	z-index: 1;
+}
+
+/*
+#panel 是包住整页的不透明底板，必须完全透明，
+否则画布无论怎么改都会被它盖住。
+*/
+#panel,
+.header--mobile {
+	background-color: transparent !important;
+}
+
+/*
+导航、页脚与内容卡片改成磨砂层。
+用 --mantine-color-body 参与混合，因此浅色主题下是磨砂白、深色主题下是磨砂黑，
+两种主题下正文对比度都正常。
+*/
+.nav,
+.footer {
+	background-color: color-mix(in srgb, var(--mantine-color-body) var(--hydro-sakura-chrome), transparent) !important;
+	backdrop-filter: blur(var(--hydro-sakura-blur)) saturate(1.1);
+}
+
+.section {
+	background-color: color-mix(in srgb, var(--mantine-color-body) var(--hydro-sakura-panel), transparent) !important;
+	backdrop-filter: blur(var(--hydro-sakura-blur)) saturate(1.1);
 }
 
 @media (prefers-reduced-motion: reduce) {

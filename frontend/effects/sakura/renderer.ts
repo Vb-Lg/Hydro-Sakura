@@ -12,8 +12,12 @@ type Particle = {
 	size: number;
 };
 
-type Locations = Record<string, number>;
+type Uniforms = Record<string, WebGLUniformLocation | null>;
+type Attributes = Record<string, number>;
 
+/*
+全屏四边形着色器：画出 HomePage 那层深紫底加左上角光晕的背景。
+*/
 const backgroundVertex = `
 	attribute vec2 aPosition;
 	varying vec2 vUv;
@@ -29,33 +33,38 @@ const backgroundFragment = `
 	uniform vec3 uGlow;
 	uniform vec2 uCenter;
 	uniform float uStrength;
-	uniform float uAlpha;
 	varying vec2 vUv;
 	void main() {
-		vec2 offset = vUv - uCenter;
-		vec2 shaped = offset * vec2(0.8, 1.15);
+		vec2 shaped = (vUv - uCenter) * vec2(0.8, 1.15);
 		float glow = exp(-dot(shaped, shaped) * 3.2);
 		vec3 color = mix(uDeep, uGlow, glow * uStrength);
 		color += vec3(0.03, 0.0, 0.04) * (1.0 - vUv.y);
-		gl_FragColor = vec4(color, uAlpha);
+		gl_FragColor = vec4(color, 1.0);
 	}
 `;
 
+/*
+花瓣着色器：按相机距离做真实透视缩放，近处的花瓣更大更亮。
+uCamera.x = 相机距离，uCamera.y = 焦距，uCamera.z = 尺寸系数。
+*/
 const petalVertex = `
 	precision highp float;
 	attribute vec3 aPosition;
 	attribute float aSize;
 	attribute float aRotation;
 	uniform vec2 uResolution;
-	uniform vec3 uDepth;
+	uniform vec3 uCamera;
+	uniform vec2 uViewDepth;
 	varying float vDepth;
 	varying float vRotation;
 	void main() {
-		float depth = max(1.0, aPosition.z - uDepth.x + uDepth.y);
-		vec2 projected = aPosition.xy * uDepth.y / depth;
-		gl_Position = vec4(projected.x / (uResolution.x / uResolution.y), projected.y, 0.0, 1.0);
-		gl_PointSize = aSize * (uResolution.y / depth) * 0.95;
-		vDepth = clamp((depth - uDepth.x) / uDepth.z, 0.0, 1.0);
+		float depth = max(0.001, uCamera.x - aPosition.z);
+		float focal = uCamera.y;
+		float aspect = uResolution.x / max(1.0, uResolution.y);
+		vec2 projected = aPosition.xy * focal / depth;
+		gl_Position = vec4(projected.x / aspect, projected.y, 0.0, 1.0);
+		gl_PointSize = clamp(aSize * uCamera.z * focal * uResolution.y * 0.5 / depth, 2.0, 64.0);
+		vDepth = clamp((uViewDepth.y - depth) / max(0.001, uViewDepth.y - uViewDepth.x), 0.0, 1.0);
 		vRotation = aRotation;
 	}
 `;
@@ -74,7 +83,7 @@ const petalFragment = `
 		vec2 petal = rotated * vec2(1.0, 1.55);
 		float edge = length(petal);
 		float notch = smoothstep(0.04, 0.0, length(petal - vec2(0.0, -0.34)));
-		float alpha = smoothstep(0.54, 0.22, edge) * (1.0 - notch * 0.55) * (0.25 + vDepth * 0.75);
+		float alpha = smoothstep(0.54, 0.22, edge) * (1.0 - notch * 0.55) * (0.32 + vDepth * 0.68);
 		if (alpha < 0.01) discard;
 		gl_FragColor = vec4(mix(uPetalDeep, uPetalLight, vDepth), alpha);
 	}
@@ -111,20 +120,15 @@ function createProgram(gl: WebGLRenderingContext, vertexSource: string, fragment
 	return program;
 }
 
-function getUniforms(gl: WebGLRenderingContext, program: WebGLProgram, names: string[]): Locations {
-	const uniforms: Locations = {};
-	for (const name of names) {
-		const location = gl.getUniformLocation(program, name);
-		if (location) uniforms[name] = location as unknown as number;
-	}
+function getUniforms(gl: WebGLRenderingContext, program: WebGLProgram, names: string[]): Uniforms {
+	const uniforms: Uniforms = {};
+	for (const name of names) uniforms[name] = gl.getUniformLocation(program, name);
 	return uniforms;
 }
 
-function getAttributes(gl: WebGLRenderingContext, program: WebGLProgram, names: string[]): Locations {
-	const attributes: Locations = {};
-	for (const name of names) {
-		attributes[name] = gl.getAttribLocation(program, name);
-	}
+function getAttributes(gl: WebGLRenderingContext, program: WebGLProgram, names: string[]): Attributes {
+	const attributes: Attributes = {};
+	for (const name of names) attributes[name] = gl.getAttribLocation(program, name);
 	return attributes;
 }
 
@@ -139,12 +143,16 @@ export class SakuraRenderer {
 	private readonly petalProgram: WebGLProgram;
 	private readonly quadBuffer: WebGLBuffer;
 	private readonly particleBuffer: WebGLBuffer;
-	private readonly backgroundUniforms: Locations;
-	private readonly backgroundAttributes: Locations;
-	private readonly petalUniforms: Locations;
-	private readonly petalAttributes: Locations;
+	private readonly backgroundUniforms: Uniforms;
+	private readonly backgroundAttributes: Attributes;
+	private readonly petalUniforms: Uniforms;
+	private readonly petalAttributes: Attributes;
 	private readonly particles: Particle[] = [];
 	private readonly particleData: Float32Array;
+	private readonly cameraUniform = new Float32Array(3);
+	private readonly viewDepthUniform = new Float32Array(2);
+	/* 花瓣水平分布范围，随视口宽高比缩放，保证宽屏两侧同样被覆盖 */
+	private areaX: number;
 	private animationFrame = 0;
 	private previousTime = 0;
 	private running = false;
@@ -158,9 +166,9 @@ export class SakuraRenderer {
 
 	constructor(canvas: HTMLCanvasElement) {
 		const gl = canvas.getContext('webgl', {
-			alpha: true,
+			alpha: false,
 			antialias: true,
-			depth: true,
+			depth: false,
 			powerPreference: 'high-performance',
 		});
 		if (!gl) throw new Error('WebGL is not supported.');
@@ -174,22 +182,33 @@ export class SakuraRenderer {
 			'uGlow',
 			'uCenter',
 			'uStrength',
-			'uAlpha',
 		]);
 		this.backgroundAttributes = getAttributes(gl, this.backgroundProgram, ['aPosition']);
 		this.petalUniforms = getUniforms(gl, this.petalProgram, [
 			'uResolution',
-			'uDepth',
+			'uCamera',
+			'uViewDepth',
 			'uPetalDeep',
 			'uPetalLight',
 		]);
 		this.petalAttributes = getAttributes(gl, this.petalProgram, ['aPosition', 'aSize', 'aRotation']);
+
 		const quadBuffer = gl.createBuffer();
 		const particleBuffer = gl.createBuffer();
 		if (!quadBuffer || !particleBuffer) throw new Error('Unable to create WebGL buffers.');
 		this.quadBuffer = quadBuffer;
 		this.particleBuffer = particleBuffer;
 		this.particleData = new Float32Array(sakuraConfig.particleCount * 5);
+
+		/* 焦距把 area.y 映射到半屏高度，coverage 略大于 1 保证画面被填满 */
+		const { camera, area, zRange, petal } = sakuraConfig;
+		this.cameraUniform[0] = camera.distance;
+		this.cameraUniform[1] = (camera.coverage * camera.distance) / area.y;
+		this.cameraUniform[2] = petal.sizeScale;
+		this.viewDepthUniform[0] = camera.distance - zRange.max;
+		this.viewDepthUniform[1] = camera.distance - zRange.min;
+		this.areaX = area.y * (window.innerWidth / Math.max(1, window.innerHeight));
+
 		this.resizeObserver = new ResizeObserver(() => this.queueResize());
 		this.createParticles();
 	}
@@ -202,8 +221,6 @@ export class SakuraRenderer {
 		gl.bufferData(gl.ARRAY_BUFFER, this.particleData.byteLength, gl.DYNAMIC_DRAW);
 		gl.enable(gl.BLEND);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-		gl.enable(gl.DEPTH_TEST);
-		gl.depthFunc(gl.LEQUAL);
 		window.addEventListener('resize', this.handleResize, { passive: true });
 		document.addEventListener('visibilitychange', this.handleVisibilityChange);
 		this.resizeObserver.observe(this.canvas);
@@ -236,7 +253,7 @@ export class SakuraRenderer {
 	}
 
 	private createParticles(): void {
-		const { area, depth, velocity, size, rotation } = sakuraConfig;
+		const { area, zRange, velocity, petal } = sakuraConfig;
 		for (let index = 0; index < sakuraConfig.particleCount; index += 1) {
 			const directionX = randomSigned() * velocity.variance.x + velocity.base.x;
 			const directionY = randomSigned() * velocity.variance.y + velocity.base.y;
@@ -244,15 +261,15 @@ export class SakuraRenderer {
 			const length = Math.hypot(directionX, directionY, directionZ) || 1;
 			const speed = velocity.speed.min + Math.random() * velocity.speed.range;
 			this.particles.push({
-				x: randomSigned() * area.x,
+				x: randomSigned() * this.areaX,
 				y: randomSigned() * area.y,
-				z: depth.near + Math.random() * depth.range,
+				z: zRange.min + Math.random() * (zRange.max - zRange.min),
 				velocityX: (directionX / length) * speed,
 				velocityY: (directionY / length) * speed,
 				velocityZ: (directionZ / length) * speed,
 				rotation: Math.random() * Math.PI * 2,
-				rotationSpeed: randomSigned() * rotation.speed,
-				size: size.min + Math.random() * size.range,
+				rotationSpeed: randomSigned() * petal.rotationSpeed,
+				size: petal.size.min + Math.random() * petal.size.range,
 			});
 		}
 	}
@@ -267,22 +284,25 @@ export class SakuraRenderer {
 	}
 
 	private update(delta: number): void {
-		const { area } = sakuraConfig;
+		const { area, zRange } = sakuraConfig;
 		for (const particle of this.particles) {
 			particle.x += particle.velocityX * delta;
 			particle.y += particle.velocityY * delta;
 			particle.z += particle.velocityZ * delta;
 			particle.rotation += particle.rotationSpeed * delta;
-			if (particle.x > area.x) particle.x = -area.x;
+			if (particle.x > this.areaX) particle.x = -this.areaX;
+			if (particle.x < -this.areaX) particle.x = this.areaX;
 			if (particle.y < -area.y) particle.y = area.y;
-			if (particle.z > area.z) particle.z = -area.z;
+			if (particle.y > area.y) particle.y = -area.y;
+			if (particle.z > zRange.max) particle.z = zRange.min;
+			if (particle.z < zRange.min) particle.z = zRange.max;
 		}
 	}
 
 	private render(): void {
 		const { gl } = this;
-		gl.clearColor(0, 0, 0, 0);
-		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		gl.clearColor(0, 0, 0, 1);
+		gl.clear(gl.COLOR_BUFFER_BIT);
 		this.renderBackground();
 		this.renderParticles();
 	}
@@ -290,13 +310,11 @@ export class SakuraRenderer {
 	private renderBackground(): void {
 		const { gl } = this;
 		const { background } = sakuraConfig;
-		gl.disable(gl.DEPTH_TEST);
 		gl.useProgram(this.backgroundProgram);
 		gl.uniform3fv(this.backgroundUniforms.uDeep, background.deep);
 		gl.uniform3fv(this.backgroundUniforms.uGlow, background.glow);
 		gl.uniform2fv(this.backgroundUniforms.uCenter, background.center);
 		gl.uniform1f(this.backgroundUniforms.uStrength, background.strength);
-		gl.uniform1f(this.backgroundUniforms.uAlpha, background.alpha);
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
 		const position = this.backgroundAttributes.aPosition;
 		gl.enableVertexAttribArray(position);
@@ -307,13 +325,14 @@ export class SakuraRenderer {
 
 	private renderParticles(): void {
 		const { gl } = this;
-		const { depth, petal } = sakuraConfig;
-		gl.enable(gl.DEPTH_TEST);
+		const { petal } = sakuraConfig;
 		gl.useProgram(this.petalProgram);
 		gl.uniform2f(this.petalUniforms.uResolution, this.canvas.width, this.canvas.height);
-		gl.uniform3f(this.petalUniforms.uDepth, depth.near, depth.scale, depth.fade);
+		gl.uniform3fv(this.petalUniforms.uCamera, this.cameraUniform);
+		gl.uniform2fv(this.petalUniforms.uViewDepth, this.viewDepthUniform);
 		gl.uniform3fv(this.petalUniforms.uPetalDeep, petal.deep);
 		gl.uniform3fv(this.petalUniforms.uPetalLight, petal.light);
+
 		for (let index = 0; index < this.particles.length; index += 1) {
 			const particle = this.particles[index];
 			const offset = index * 5;
@@ -323,6 +342,7 @@ export class SakuraRenderer {
 			this.particleData[offset + 3] = particle.size;
 			this.particleData[offset + 4] = particle.rotation;
 		}
+
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.particleBuffer);
 		gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.particleData);
 		const { aPosition, aSize, aRotation } = this.petalAttributes;
@@ -346,6 +366,7 @@ export class SakuraRenderer {
 		if (this.canvas.width === width && this.canvas.height === height) return;
 		this.canvas.width = width;
 		this.canvas.height = height;
+		this.areaX = sakuraConfig.area.y * (width / height);
 		this.gl.viewport(0, 0, width, height);
 	}
 

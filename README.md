@@ -6,7 +6,8 @@ HydroOJ 的动态樱花背景主题插件。插件通过 Hydro 的 `frontend/*.p
 
 - 在所有 Hydro 页面注入固定定位的樱花背景
 - 使用 TypeScript 与 WebGL 实现 3D 透视樱花，不依赖 Hydro 页面 DOM 结构
-- 花瓣按 Z 轴景深改变大小、透明度和颜色，并带有暗紫光晕背景
+- 花瓣按 Z 轴景深改变大小、透明度和颜色，水平范围随视口宽高比缩放，宽屏也能铺满
+- 把 Hydro 主题的不透明页面层改成磨砂玻璃，背景才能真正透出来
 - 页面不可见时暂停动画，返回页面后自动恢复
 - 支持高 DPI 屏幕，限制设备像素比最多为 2
 - 尊重 `prefers-reduced-motion: reduce`，用户要求减少动画时不创建背景
@@ -75,13 +76,37 @@ Hydro-Sakura/
 
 ## 调整效果
 
-粒子数量、运动范围、景深、花瓣配色和背景光晕位于 `frontend/effects/sakura/config.ts`。
+粒子数量、相机透视、景深、花瓣配色和背景光晕位于 `frontend/effects/sakura/config.ts`。
 
-建议先调整 `particleCount`：桌面端可以使用 `900` 到 `1600`，移动端或低配置设备可以降低到 `300` 到 `700`。
+常用参数：
 
-背景 canvas 的层级和响应式行为位于 `frontend/sakura.css`。
+- `particleCount`：花瓣数量，桌面端建议 `900` 到 `1600`，移动端或低配设备降到 `300` 到 `700`
+- `camera.distance`：相机距离，越大透视越平缓
+- `camera.coverage`：画面填充比例，小于 `1` 会让花瓣向中心收缩
+- `area.y`：垂直分布范围，水平范围由它乘以视口宽高比自动推导
+- `zRange`：花瓣沿 Z 轴的活动范围
 
-不要覆盖 Hydro 的完整模板。Hydro 官方文档建议优先使用 frontend 动态注入，这样升级 Hydro 时不容易产生模板冲突。
+## 背景为什么需要改 CSS
+
+Hydro 默认主题给页面骨架写了不透明背景，固定定位的画布会被完全盖住：
+
+| 选择器 | 主题默认值 |
+| --- | --- |
+| `#panel` | `#edf0f2` |
+| `.section` | `#fff`（深色主题 `#323334`） |
+| `.footer` | `#fff` |
+| `.nav` | `#fffffffa` |
+
+`frontend/sakura.css` 因此把 `#panel` 设为完全透明，并把 `.section`、`.nav`、`.footer`
+改成基于 `--mantine-color-body` 的磨砂层，这样浅色与深色主题下正文对比度都正常。
+
+可调变量：
+
+- `--hydro-sakura-panel`：内容卡片不透明度，越低樱花越明显（默认 `84%`）
+- `--hydro-sakura-chrome`：导航与页脚不透明度（默认 `74%`）
+- `--hydro-sakura-blur`：磨砂强度（默认 `12px`）
+
+不建议直接覆盖 Hydro 的完整模板。官方文档推荐优先使用 frontend 动态注入，这样升级 Hydro 时不容易产生模板冲突。
 
 ## 开发检查
 
