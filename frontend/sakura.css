@@ -12,6 +12,7 @@
 }
 
 body {
+	background-color: #1b1f22;
 	isolation: isolate;
 }
 

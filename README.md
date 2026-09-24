@@ -5,7 +5,8 @@ HydroOJ 的动态樱花背景主题插件。插件通过 Hydro 的 `frontend/*.p
 ## 特性
 
 - 在所有 Hydro 页面注入固定定位的樱花背景
-- 使用 TypeScript 和 Canvas 2D，避免依赖 Hydro 页面 DOM 结构
+- 使用 TypeScript 与 WebGL 实现 3D 透视樱花，不依赖 Hydro 页面 DOM 结构
+- 花瓣按 Z 轴景深改变大小、透明度和颜色，并带有暗紫光晕背景
 - 页面不可见时暂停动画，返回页面后自动恢复
 - 支持高 DPI 屏幕，限制设备像素比最多为 2
 - 尊重 `prefers-reduced-motion: reduce`，用户要求减少动画时不创建背景
@@ -74,7 +75,7 @@ Hydro-Sakura/
 
 ## 调整效果
 
-粒子数量、速度、大小和背景颜色位于 `frontend/effects/sakura/config.ts`。
+粒子数量、运动范围、景深、花瓣配色和背景光晕位于 `frontend/effects/sakura/config.ts`。
 
 建议先调整 `particleCount`：桌面端可以使用 `900` 到 `1600`，移动端或低配置设备可以降低到 `300` 到 `700`。
 

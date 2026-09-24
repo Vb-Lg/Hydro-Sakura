@@ -1,9 +1,10 @@
 import './sakura.css';
 
 import { addPage, AutoloadPage } from '@hydrooj/ui-default';
+import { sakuraConfig } from './effects/sakura/config';
 import { createSakuraRenderer, SakuraRenderer } from './effects/sakura/renderer';
 
-const canvasId = 'hydro-sakura-canvas';
+const canvasId = sakuraConfig.canvasId;
 let renderer: SakuraRenderer | null = null;
 
 function ensureCanvas(): HTMLCanvasElement {
