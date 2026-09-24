@@ -4,13 +4,20 @@ HydroOJ 的动态樱花背景主题插件。插件通过 Hydro 的 `frontend/*.p
 
 ## 特性
 
-- 在所有 Hydro 页面注入固定定位的樱花背景
-- 使用 TypeScript 与 WebGL 实现 3D 透视樱花，不依赖 Hydro 页面 DOM 结构
-- 花瓣按 Z 轴景深改变大小、透明度和颜色，水平范围随视口宽高比缩放，宽屏也能铺满
+渲染管线移植自 [vblg.top](https://vblg.top) 首页，两处看到的画面使用同一套着色器与参数。
+
+- 在所有 Hydro 页面注入固定定位的樱花背景，不依赖 Hydro 页面 DOM 结构
+- 相机透视投影：花瓣按景深改变大小，水平范围随视口宽高比缩放，宽屏两侧同样铺满
+- 花瓣基于欧拉角旋转，按法线做漫反射与高光计算，并用椭圆切口拼出樱花瓣形状
+- 距离淡出：远处花瓣颜色向背景色收敛，形成纵深：靠近相机的花瓣自动淡出，避免糊脸
+- 景深模糊（DOF）：离焦花瓣边缘变软
+- 五层偏移叠加，形成看不到边界的立体花瓣场
+- 后处理链：高亮提取 + 横纵分离模糊两次迭代 + 径向暗角 + gamma 提亮，即花瓣的辉光
 - 把 Hydro 主题的不透明页面层改成磨砂玻璃，背景才能真正透出来
-- 页面不可见时暂停动画，返回页面后自动恢复
+- 页面不可见或被 bfcache 缓存时暂停动画，返回页面后自动恢复
 - 支持高 DPI 屏幕，限制设备像素比最多为 2
 - 尊重 `prefers-reduced-motion: reduce`，用户要求减少动画时不创建背景
+- WebGL 不可用时只输出一条警告，不影响 OJ 正常使用
 - renderer 提供 `dispose()`，便于后续接入页面切换或热重载
 
 ## 环境
@@ -76,15 +83,21 @@ Hydro-Sakura/
 
 ## 调整效果
 
-粒子数量、相机透视、景深、花瓣配色和背景光晕位于 `frontend/effects/sakura/config.ts`。
+所有视觉效果参数都在 `frontend/effects/sakura/config.ts`，与首页保持同一套命名。
 
 常用参数：
 
-- `particleCount`：花瓣数量，桌面端建议 `900` 到 `1600`，移动端或低配设备降到 `300` 到 `700`
-- `camera.distance`：相机距离，越大透视越平缓
-- `camera.coverage`：画面填充比例，小于 `1` 会让花瓣向中心收缩
-- `area.y`：垂直分布范围，水平范围由它乘以视口宽高比自动推导
-- `zRange`：花瓣沿 Z 轴的活动范围
+- `particle.count`：花瓣数量，桌面端 `1200` 到 `1800`，移动端或低配设备降到 `400` 到 `800`
+- `render.backgroundIntensity`：背景亮度倍率。`0.5` 与首页完全一致；
+  OJ 页面内容较密，调到 `0.3` 到 `0.4` 可弱化亮部，文字区的背景更安静
+- `particle.size`：花瓣大小，`min` 为基准值，`range` 为随机浮动范围
+- `particle.velocity`：运动方向和速度，`base` 是主方向，`variance` 是随机扰动
+- `particle.fade`：`start` 与 `halfDistance` 控制多远开始淡出，`nearStart` 控制多近开始淡出
+- `camera.dof`：`x` 清晰距离、`y` 清晰半径、`z` 模糊过渡宽度
+- `postProcess.blurIterations`：辉光迭代次数，减到 `1` 可以明显降低 GPU 占用
+- `pixelRatioCap`：设备像素比上限，默认 `2`，低配设备可以设为 `1`
+
+背景画布的层级和卡片透明度在 `frontend/sakura.css`。
 
 ## 背景为什么需要改 CSS
 
