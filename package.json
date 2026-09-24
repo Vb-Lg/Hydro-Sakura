@@ -1,0 +1,14 @@
+{
+	"name": "hydro-sakura-theme",
+	"version": "0.1.0",
+	"description": "HydroOJ dynamic sakura background theme",
+	"main": "index.ts",
+	"license": "MIT",
+	"private": true,
+	"dependencies": {
+		"hydrooj": "*"
+	},
+	"devDependencies": {
+		"typescript": "^5.0.0"
+	}
+}

@@ -1,0 +1,24 @@
+#hydro-sakura-canvas {
+	position: fixed;
+	inset: 0;
+	display: block;
+	width: 100vw;
+	height: 100vh;
+	pointer-events: none;
+	z-index: 0;
+}
+
+body {
+	isolation: isolate;
+}
+
+body > *:not(#hydro-sakura-canvas) {
+	position: relative;
+	z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#hydro-sakura-canvas {
+		display: none;
+	}
+}
