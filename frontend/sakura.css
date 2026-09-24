@@ -9,11 +9,14 @@ Hydro 默认主题给 #panel(不透明 #edf0f2)、.section(#fff)、.footer(#fff)
 	--hydro-sakura-panel  内容卡片的不透明度，越低樱花越明显
 	--hydro-sakura-chrome 导航与页脚的不透明度
 	--hydro-sakura-blur   磨砂强度
+
+这三项已接入管理面板的域设置（sakuraPanelOpacity / sakuraChromeOpacity / sakuraBlur），
+由 frontend/effects/sakura/theme.ts 写入行内样式覆盖这里的默认值。
 */
 :root {
-	--hydro-sakura-panel: 84%;
-	--hydro-sakura-chrome: 74%;
-	--hydro-sakura-blur: 12px;
+	--hydro-sakura-panel: 62%;
+	--hydro-sakura-chrome: 52%;
+	--hydro-sakura-blur: 14px;
 }
 
 #hydro-sakura-canvas {

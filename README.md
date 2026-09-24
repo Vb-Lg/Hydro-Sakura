@@ -14,6 +14,7 @@ HydroOJ 的动态樱花背景主题插件。插件通过 Hydro 的 `frontend/*.p
 - 五层偏移叠加，形成看不到边界的立体花瓣场
 - 后处理链：高亮提取 + 横纵分离模糊两次迭代 + 径向暗角 + gamma 提亮，即花瓣的辉光
 - 把 Hydro 主题的不透明页面层改成磨砂玻璃，背景才能真正透出来
+- 卡片透明度、导航透明度与磨砂强度可在管理面板的域设置里直接调整
 - 页面不可见或被 bfcache 缓存时暂停动画，返回页面后自动恢复
 - 支持高 DPI 屏幕，限制设备像素比最多为 2
 - 尊重 `prefers-reduced-motion: reduce`，用户要求减少动画时不创建背景
@@ -69,7 +70,7 @@ yarn add hydrooj -D
 
 ```text
 Hydro-Sakura/
-├── index.ts
+├── index.ts              服务端入口：注册域设置 + 下发外观设置接口
 ├── package.json
 ├── frontend/
 │   ├── sakura.css
@@ -77,9 +78,30 @@ Hydro-Sakura/
 │   ├── hydro-ui-default.d.ts
 │   └── effects/sakura/
 │       ├── config.ts
-│       └── renderer.ts
+│       ├── renderer.ts
+│       └── theme.ts
 └── README.md
 ```
+
+## 管理面板设置
+
+管理面板 → **域设置**（`/domain/edit`）里新增了三项：
+
+| 设置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `sakuraPanelOpacity` | `62` | 内容卡片不透明度（%），越低樱花越明显 |
+| `sakuraChromeOpacity` | `52` | 导航与页脚不透明度（%） |
+| `sakuraBlur` | `14` | 磨砂模糊强度（px） |
+
+取值会自动夹到安全范围（不透明度 `0-100`，模糊 `0-40`），填错也不会把主题弄坏。
+
+工作方式：`index.ts` 把设置注册为域设置，并提供一个只读接口
+`/hydro-sakura/theme.json` 下发当前域的值；`frontend/effects/sakura/theme.ts`
+拉取后写入 `:root` 的行内 CSS 变量，覆盖 `sakura.css` 里的默认值。
+换页时会先把上次的值从 `localStorage` 取出来直接应用，因此不会每页都闪一下默认透明度；
+接口不可用时静默退回缓存值或 CSS 默认值，不影响樱花背景本身。
+
+> 设置项存在域文档上，因此是按域生效的；多域站点需要逐域配置。
 
 ## 调整效果
 
@@ -97,7 +119,7 @@ Hydro-Sakura/
 - `postProcess.blurIterations`：辉光迭代次数，减到 `1` 可以明显降低 GPU 占用
 - `pixelRatioCap`：设备像素比上限，默认 `2`，低配设备可以设为 `1`
 
-背景画布的层级和卡片透明度在 `frontend/sakura.css`。
+背景画布的层级在 `frontend/sakura.css`，卡片透明度等外观项见上面的「管理面板设置」。
 
 ## 背景为什么需要改 CSS
 
@@ -123,14 +145,21 @@ Hydro 默认主题给页面骨架写了不透明背景，固定定位的画布�
 
 ## 开发检查
 
-在插件目录执行：
+在插件目录执行（需要先 `yarn install`，`hydrooj` 提供服务端类型）：
 
 ```bash
 npx tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler \
-	--lib ES2022,DOM \
+	--lib esnext,DOM --experimentalDecorators --types node \
 	index.ts frontend/hydro-ui-default.d.ts frontend/sakura.page.ts \
-	frontend/effects/sakura/config.ts frontend/effects/sakura/renderer.ts
+	frontend/effects/sakura/config.ts frontend/effects/sakura/renderer.ts \
+	frontend/effects/sakura/theme.ts 2>&1 | grep -E '^(index\.ts|frontend/[^ ]*)\([0-9]+,[0-9]+\): error'
 ```
+
+输出为空即通过。`index.ts` 会导入真实的 `hydrooj` 类型，Hydro 自身源码里另有少量
+与本次改动无关的类型报错（依赖的 `@types/node` 版本差异等），所以这里只过滤出本仓库文件的错误。
+
+前端部分也可以单独在浏览器里验证：用 esbuild 把入口打成 IIFE，
+在同构页面上跑一次即可，不需要启动完整的 Hydro。
 
 如果本地还没有 `typescript`，可以临时执行：
 
